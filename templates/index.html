@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Resume Ranker</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --panel-2: #273449;
+      --panel-3: #1a2540;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --border: #334155;
+      --good: #34d399;
+      --warn: #fbbf24;
+      --red: #f87171;
+      --radius: 10px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh; font-size: 14px;
+    }
+    header { padding: 24px 32px 20px; border-bottom: 1px solid var(--border); }
+    .header-inner { display: flex; align-items: center; gap: 14px; max-width: 1100px; margin: 0 auto; }
+    .logo {
+      width: 36px; height: 36px; background: var(--accent); border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 13px; color: #08131f; flex-shrink: 0; letter-spacing: -.3px;
+    }
+    .header-text h1 { font-size: 18px; font-weight: 600; letter-spacing: -.2px; }
+    .header-text p { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    main { padding: 24px 32px 80px; max-width: 1100px; margin: 0 auto; }
+    .card {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px; margin-bottom: 18px;
+    }
+    .section-label {
+      font-size: 11px; font-weight: 600; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 14px;
+    }
+    /* Upload zones */
+    .upload-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+    @media (max-width: 680px) { .upload-row, .jd-grid { grid-template-columns: 1fr; } }
+    .drop {
+      border: 1.5px dashed var(--border); border-radius: 8px;
+      padding: 22px 16px; text-align: center; cursor: pointer;
+      transition: border-color .15s, background .15s; position: relative; min-height: 100px;
+    }
+    .drop:hover, .drop.over { border-color: var(--accent); background: rgba(56,189,248,.05); }
+    .drop.ready { border-color: var(--good); border-style: solid; }
+    .drop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .drop-icon { font-size: 22px; margin-bottom: 6px; }
+    .drop-label { font-size: 13px; font-weight: 500; }
+    .drop-hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .drop-file { font-size: 11px; color: var(--good); margin-top: 4px; display: none; }
+    .drop.ready .drop-file { display: block; }
+    .drop.ready .drop-hint { display: none; }
+    /* Actions */
+    .actions-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .btn-run {
+      background: var(--accent); color: #08131f; border: none;
+      padding: 9px 18px; border-radius: 8px; font-weight: 600; font-size: 13px;
+      cursor: pointer; display: flex; align-items: center; gap: 8px; transition: opacity .15s;
+    }
+    .btn-run:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-dl {
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+      padding: 9px 16px; border-radius: 8px; font-weight: 500; font-size: 13px;
+      cursor: pointer; display: none; text-decoration: none;
+      transition: border-color .15s, color .15s;
+    }
+    .btn-dl:hover { border-color: var(--accent); color: var(--accent); }
+    .meta-note { font-size: 12px; color: var(--muted); }
+    .spinner {
+      width: 14px; height: 14px; border: 2px solid rgba(8,19,31,.3);
+      border-top-color: #08131f; border-radius: 50%;
+      animation: spin .7s linear infinite; flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error { color: var(--red); font-size: 13px; margin-top: 10px; display: none; }
+    /* JD intelligence panel */
+    #jd-card { display: none; }
+    .jd-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+    .jd-block h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 8px; }
+    .pill-list { display: flex; flex-wrap: wrap; gap: 5px; }
+    .pill {
+      display: inline-block; padding: 3px 9px; border-radius: 20px;
+      font-size: 11px; font-weight: 500; border: 1px solid var(--border); color: var(--muted);
+    }
+    .pill.must { border-color: var(--accent); color: var(--accent); background: rgba(56,189,248,.07); }
+    .pill.skill { background: rgba(52,211,153,.07); border-color: rgba(52,211,153,.3); color: var(--good); }
+    .pill.hidden { background: rgba(251,191,36,.07); border-color: rgba(251,191,36,.3); color: var(--warn); }
+    /* Results */
+    #results-card { display: none; }
+    .results-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px; flex-wrap: wrap; gap: 8px;
+    }
+    .results-header h2 { font-size: 15px; font-weight: 600; }
+    .stats-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .stat-chip {
+      font-size: 11px; color: var(--muted); background: var(--panel-2);
+      border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px;
+    }
+    .stat-chip b { color: var(--text); }
+    .table-wrap { max-height: 520px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      padding: 9px 12px; border-bottom: 1px solid var(--border);
+      color: var(--muted); font-weight: 600; font-size: 11px;
+      letter-spacing: .05em; text-transform: uppercase;
+      position: sticky; top: 0; background: var(--panel-3); white-space: nowrap;
+    }
+    td { padding: 10px 12px; border-bottom: 1px solid rgba(51,65,85,.5); vertical-align: top; line-height: 1.5; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(30,41,59,.6); }
+    .td-rank { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; width: 42px; }
+    .td-id { font-size: 11px; color: var(--muted); font-family: monospace; white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+    .td-score { white-space: nowrap; width: 96px; }
+    .score-val { font-variant-numeric: tabular-nums; color: var(--good); font-weight: 600; font-size: 13px; }
+    .score-bar { height: 3px; background: var(--panel-2); border-radius: 2px; margin-top: 4px; width: 72px; }
+    .score-fill { height: 100%; border-radius: 2px; background: var(--good); }
+    .r-head { font-weight: 500; font-size: 13px; color: var(--text); margin-bottom: 3px; }
+    .r-body { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .r-badges { margin-top: 5px; display: flex; flex-wrap: wrap; gap: 4px; }
+    .badge { font-size: 10px; padding: 2px 7px; border-radius: 12px; font-weight: 500; }
+    .badge-str { background: rgba(52,211,153,.1); color: var(--good); border: 1px solid rgba(52,211,153,.2); }
+    .badge-con { background: rgba(248,113,113,.1); color: var(--red); border: 1px solid rgba(248,113,113,.2); }
+    .badge-avail { background: rgba(56,189,248,.1); color: var(--accent); border: 1px solid rgba(56,189,248,.2); }
+    .badge-assessment { background: rgba(251,191,36,.08); color: var(--warn); border: 1px solid rgba(251,191,36,.25); max-width: 100%; white-space: normal; }
+    .r-evidence { font-size: 11px; color: var(--accent); margin-top: 4px; font-style: italic; }
+    .r-evidence::before { content: "🔍 "; }
+    .r-assessment { font-size: 11px; color: var(--warn); margin-top: 4px; font-weight: 600; }
+    .r-recommendation { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    tr.gate-fail td { opacity: 0.55; }
+    tr.gate-fail .td-rank { color: var(--red); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="logo">RR</div>
+      <div class="header-text">
+        <h1>AI Resume Ranker</h1>
+        <p>Upload a job description and candidates file — get the top 100 best-fit candidates as a submission CSV.</p>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <form id="rank-form" class="card" enctype="multipart/form-data">
+      <p class="section-label">Upload files</p>
+      <div class="upload-row">
+        <div class="drop" id="zone-jd">
+          <input type="file" name="job_description" id="jd-input" accept="*/*" />
+          <div class="drop-icon">📋</div>
+          <div class="drop-label">Job description</div>
+          <div class="drop-hint">.txt · .md · .json · .docx · .pdf · .pptx · .xlsx · .csv</div>
+          <div class="drop-file" id="jd-fname"></div>
+        </div>
+        <div class="drop" id="zone-cand">
+          <input type="file" name="candidates" id="cand-input" accept="*/*" />
+          <div class="drop-icon">👥</div>
+          <div class="drop-label">Candidates</div>
+          <div class="drop-hint">.jsonl · .json · .csv · .xlsx · .docx · .pdf</div>
+          <div class="drop-file" id="cand-fname"></div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn-run" id="run-btn" type="submit" disabled>
+          <span id="btn-icon">⚡</span>
+          <span id="btn-label">Rank candidates</span>
+        </button>
+        <a class="btn-dl" id="dl-btn" href="#">Download CSV</a>
+        <span class="meta-note" id="meta"></span>
+      </div>
+      <div class="error" id="error-box"></div>
+    </form>
+
+    <!-- JD Intelligence panel (shown after ranking) -->
+    <div class="card" id="jd-card">
+      <p class="section-label">Job description intelligence</p>
+      <div class="jd-grid">
+        <div class="jd-block">
+          <h3>Must-have requirements</h3>
+          <div class="pill-list" id="jd-must"></div>
+        </div>
+        <div class="jd-block">
+          <h3>Key skills detected</h3>
+          <div class="pill-list" id="jd-skills"></div>
+        </div>
+        <div class="jd-block">
+          <h3>Hidden recruiter intent</h3>
+          <div class="pill-list" id="jd-intent"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results table -->
+    <div class="card" id="results-card">
+      <div class="results-header">
+        <h2>Top 100 candidates</h2>
+        <div class="stats-row">
+          <div class="stat-chip">Parsed <b id="stat-total">–</b></div>
+          <div class="stat-chip">Role <b id="stat-title">–</b></div>
+          <div class="stat-chip">Time <b id="stat-time">–</b></div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Score</th>
+              <th>Candidate ID</th>
+              <th>Reasoning</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function setupDrop(zoneId, inputId, fnameId) {
+      const zone = document.getElementById(zoneId);
+      const input = document.getElementById(inputId);
+      const fname = document.getElementById(fnameId);
+      const mark = () => {
+        if (input.files.length) {
+          zone.classList.add('ready');
+          fname.textContent = '✓ ' + input.files[0].name;
+        }
+        checkReady();
+      };
+      input.addEventListener('change', mark);
+      zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('over'); });
+      zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+      zone.addEventListener('drop', e => {
+        e.preventDefault(); zone.classList.remove('over');
+        if (e.dataTransfer.files.length) {
+          const dt = new DataTransfer();
+          dt.items.add(e.dataTransfer.files[0]);
+          input.files = dt.files;
+        }
+        mark();
+      });
+    }
+    setupDrop('zone-jd', 'jd-input', 'jd-fname');
+    setupDrop('zone-cand', 'cand-input', 'cand-fname');
+
+    function checkReady() {
+      const ok = document.getElementById('jd-input').files.length > 0
+        && document.getElementById('cand-input').files.length > 0;
+      document.getElementById('run-btn').disabled = !ok;
+    }
+
+    const form = document.getElementById('rank-form');
+    const runBtn = document.getElementById('run-btn');
+    const dlBtn = document.getElementById('dl-btn');
+    const errorBox = document.getElementById('error-box');
+    const metaEl = document.getElementById('meta');
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      errorBox.style.display = 'none';
+      dlBtn.style.display = 'none';
+      metaEl.textContent = '';
+      runBtn.disabled = true;
+      document.getElementById('btn-icon').outerHTML = '<span class="spinner" id="btn-icon"></span>';
+      document.getElementById('btn-label').textContent = 'Ranking\u2026';
+
+      try {
+        const fd = new FormData(form);
+        const res = await fetch('/rank', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+
+        renderJD(data);
+        renderResults(data);
+        dlBtn.href = data.download_url;
+        dlBtn.style.display = 'inline-block';
+        metaEl.textContent = 'Done in ' + data.elapsed_seconds + 's';
+      } catch (err) {
+        errorBox.textContent = '\u26a0 ' + (err.message || String(err));
+        errorBox.style.display = 'block';
+      } finally {
+        runBtn.disabled = false;
+        const icon = document.getElementById('btn-icon');
+        if (icon) icon.outerHTML = '<span id="btn-icon">\u26a1</span>';
+        document.getElementById('btn-label').textContent = 'Rank candidates';
+        checkReady();
+      }
+    });
+
+    function pills(containerId, items, cls) {
+      const el = document.getElementById(containerId);
+      el.innerHTML = '';
+      (items || []).slice(0, 18).forEach(s => {
+        const sp = document.createElement('span');
+        sp.className = 'pill ' + cls;
+        sp.textContent = s;
+        el.appendChild(sp);
+      });
+      if (!items || !items.length) {
+        el.innerHTML = '<span style="font-size:11px;color:var(--muted)">None extracted</span>';
+      }
+    }
+
+    function renderJD(data) {
+      document.getElementById('jd-card').style.display = '';
+      pills('jd-must', data.jd_must_have, 'must');
+      pills('jd-skills', data.jd_key_skills, 'skill');
+      pills('jd-intent', data.jd_hidden_intent, 'hidden');
+    }
+
+    function parseReasoning(raw) {
+      // Split on ' | ' separator (with spaces), collect labeled sections
+      const parts = raw.split(' | ').map(s => s.trim());
+      const r = { head: parts[0] || '', evidence: '', strengths: [], concerns: [],
+                  availability: '', scores: '', assessment: '', recommendation: '' };
+      parts.slice(1).forEach(p => {
+        if (p.startsWith('EVIDENCE:'))      r.evidence      = p.slice(9).trim();
+        else if (p.startsWith('STRENGTHS:')) r.strengths    = p.slice(10).trim().split(';').map(s => s.trim()).filter(Boolean);
+        else if (p.startsWith('CONCERNS:'))  r.concerns     = p.slice(9).trim().split(';').map(s => s.trim()).filter(Boolean);
+        else if (p.startsWith('AVAILABILITY:')) r.availability = p.slice(13).trim();
+        else if (p.startsWith('SCORES:'))    r.scores       = p.slice(7).trim();
+        else if (p.startsWith('ASSESSMENT:')) r.assessment  = p.slice(11).trim();
+        else if (p.startsWith('RECOMMENDATION:')) r.recommendation = p.slice(15).trim();
+      });
+      return r;
+    }
+
+    function renderResults(data) {
+      document.getElementById('stat-total').textContent = data.total_candidates || '\u2013';
+      document.getElementById('stat-title').textContent = data.jd_title || '\u2013';
+      document.getElementById('stat-time').textContent =
+        data.elapsed_seconds != null ? data.elapsed_seconds + 's' : '\u2013';
+
+      const rows = data.rows || [];
+      const maxScore = Math.max(...rows.map(r => r.score || 0), 0.001);
+      const tbody = document.getElementById('rows');
+      tbody.innerHTML = '';
+
+      rows.forEach(r => {
+        const pct = Math.round((r.score / maxScore) * 100);
+        const p = parseReasoning(r.reasoning || '');
+
+        // Gate-failed rows get dimmed
+        const gateFail = p.assessment.startsWith('NOT QUALIFIED') || p.assessment.startsWith('SUSPICIOUS');
+        // Score bar colour: green for passed, amber for borderline, red for failed
+        const barColor = gateFail ? 'var(--red)' : (r.score >= 0.55 ? 'var(--good)' : 'var(--warn)');
+
+        const strengthBadges = p.strengths.map(s =>
+          '<span class="badge badge-str">' + esc(s) + '</span>'
+        ).join('');
+        const concernBadges = p.concerns.map(s =>
+          '<span class="badge badge-con">' + esc(s) + '</span>'
+        ).join('');
+        const availBadge = p.availability
+          ? '<span class="badge badge-avail">' + esc(p.availability) + '</span>'
+          : '';
+
+        const tr = document.createElement('tr');
+        if (gateFail) tr.classList.add('gate-fail');
+
+        tr.innerHTML =
+          '<td class="td-rank">' + r.rank + '</td>' +
+          '<td class="td-score">' +
+            '<div class="score-val" style="color:' + barColor + '">' + (r.score ?? 0).toFixed(4) + '</div>' +
+            '<div class="score-bar"><div class="score-fill" style="width:' + pct + '%;background:' + barColor + '"></div></div>' +
+          '</td>' +
+          '<td class="td-id" title="' + esc(r.candidate_id) + '">' + esc(r.candidate_id || '\u2014') + '</td>' +
+          '<td class="td-reasoning">' +
+            '<div class="r-head">' + esc(p.head) + '</div>' +
+            (p.evidence ? '<div class="r-evidence">' + esc(p.evidence) + '</div>' : '') +
+            ((strengthBadges || concernBadges || availBadge)
+              ? '<div class="r-badges">' + strengthBadges + concernBadges + availBadge + '</div>'
+              : '') +
+            (p.assessment ? '<div class="r-assessment">' + esc(p.assessment) + '</div>' : '') +
+            (p.recommendation ? '<div class="r-recommendation">' + esc(p.recommendation) + '</div>' : '') +
+            (p.scores ? '<div class="r-body" style="margin-top:3px">' + esc(p.scores) + '</div>' : '') +
+          '</td>';
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('results-card').style.display = '';
+    }
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+  </script>
+</body>
+</html>
