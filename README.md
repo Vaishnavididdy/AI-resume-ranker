@@ -1,84 +1,228 @@
 # AI Resume Ranker
 
-AI-powered candidate ranking for the Data & AI Challenge.
-Ranks candidates from any JSONL/JSON file against any job description and
-exports the top 100 to a submission CSV.
+AI-powered candidate ranking system built for the Redrob Data & AI Challenge.
+
+The system ranks candidates from structured profile datasets (JSON / JSONL) against a given job description and generates a submission-ready CSV containing the top 100 ranked candidates with reasoning.
+
+---
+
+## Overview
+
+This project uses a hybrid ranking pipeline combining:
+
+- Semantic similarity matching
+- Feature engineering from candidate profiles
+- Weighted scoring across multiple ranking signals
+- Pairwise reranking for close candidates
+- Explicit trap / honeypot detection
+
+The goal is to identify genuinely relevant AI / ML candidates while reducing false positives caused by keyword stuffing, fake AI profiles, or irrelevant career backgrounds.
+
+---
 
 ## Architecture
 
+```text
+Job Description
+    │
+    ├──► jd_intelligence.py
+    │      Parses job description into structured features:
+    │      - title
+    │      - minimum experience
+    │      - key skills
+    │      - must-have requirements
+    │      - red flags
+    │
+    │      Supports optional LLM-assisted parsing
+    │      with offline keyword fallback.
+    │
+Candidates
+    │
+    ├──► feature_engineering.py
+    │      Extracts candidate signals:
+    │      - retrieval / ranking evidence
+    │      - production ML evidence
+    │      - company relevance
+    │      - behavioral signals
+    │      - disqualification penalties
+    │
+    ├──► embeddings.py
+    │      Computes semantic similarity using:
+    │      - sentence-transformers
+    │      - TF-IDF fallback
+    │
+    ├──► ranker.py
+    │
+    │      Stage 1 Scoring
+    │      • 25% semantic similarity
+    │      • 25% production ML evidence
+    │      • 30% retrieval/ranking evidence
+    │      • 15% product-company relevance
+    │      •  5% behavioral signals
+    │      • + experience bonus
+    │
+    ├──► pairwise_ranker.py
+    │      Stage 2 Pairwise Reranking
+    │      Refines ordering among top candidates
+    │
+    ├──► reasoning.py
+    │      Generates evidence-based reasoning
+    │
+    └──► submission.py
+           Builds final submission CSV
 ```
-JD file ──► jd_intelligence.py (Claude API, one-shot)
-               └──► structured JSON: must_have, preferred,
-                    red_flags, hidden_intent, key_skills, min_years
 
-Candidates ──► feature_engineering.py
-                 └──► per-candidate structured features:
-                      ai_depth, retrieval, production, ranking_eval,
-                      python, product_score, consulting_multiplier,
-                      availability_score, years_experience
+---
 
-Both ──► embeddings.py (sentence-transformers all-MiniLM-L6-v2 / TF-IDF fallback)
-           └──► cosine similarity per candidate
+## Ranking Strategy
 
-All signals ──► ranker.py (hybrid score)
-                  └──► 0.35 semantic + 0.25 domain + 0.20 skill_overlap
-                       + 0.20 experience_fit + 0.05 availability
-                  └──► penalties: honeypot ×0.5, consulting ×0.5–1.0
+### Stage 1 — Weighted Candidate Scoring
 
-──► reasoning.py (evidence-based, no hallucination)
-──► submission.py → submission.csv (always 100 rows)
+Each candidate receives a weighted score using:
+
+- **Semantic Similarity**  
+  Measures overall job-description relevance.
+
+- **Production ML Evidence**  
+  Rewards candidates with real deployment experience.
+
+- **Retrieval / Ranking Evidence**  
+  Prioritizes search, recommendation, ranking, and retrieval system experience.
+
+- **Product Company Relevance**  
+  Gives higher preference to product-focused engineering backgrounds.
+
+- **Behavioral Signals**  
+  Uses recruiter interaction and availability indicators.
+
+---
+
+### Stage 2 — Pairwise Ranking
+
+Top candidates are compared pairwise across multiple dimensions to improve ordering within close score ranges.
+
+This improves ranking precision in the top shortlist.
+
+---
+
+## Penalty System
+
+Explicit penalties reduce scores for suspicious or irrelevant profiles:
+
+- Honeypot candidates
+- Keyword stuffing
+- Consulting-only profiles
+- Irrelevant roles
+- Fake AI buzzword inflation
+- Weak retrieval evidence
+
+---
+
+## Constraints Honoured
+
+- CPU-only execution
+- Candidate ranking runs fully offline
+- Runtime designed for ≤ 5 minutes
+- Designed for ≤ 16 GB RAM
+- No external API required during ranking
+
+### Offline Embedding Fallback
+
+If sentence-transformer embeddings are unavailable in offline environments, the system automatically falls back to TF-IDF similarity without breaking the pipeline.
+
+---
+
+## Input Formats
+
+Supported candidate / JD formats:
+
+- TXT
+- PDF
+- DOCX
+- JSON
+- JSONL
+- CSV
+- XLSX
+
+---
+
+## Output Format
+
+The system generates:
+
+```csv
+candidate_id,rank,score,reasoning
 ```
 
-## Constraints honoured
-- CPU only · no external/hosted LLM APIs at ranking time
-- LLM (Claude Sonnet via API) used **once** for JD parsing only, before ranking
-- Runtime ≤ 5 min · RAM ≤ 16 GB
-- Output: exactly 100 ranked rows — `candidate_id, rank, score, reasoning`
+Exactly 100 ranked candidates are exported.
 
-## Run locally
+---
+
+## Run Locally
+
+Install dependencies:
 
 ```bash
 pip install -r requirements.txt
-python app.py
-# open http://localhost:5000
 ```
 
-Upload a JD file and a candidates JSONL/JSON file, click **Rank Candidates**,
-then **Download CSV**.
+Run:
 
-## Modules
+```bash
+python app.py
+```
+
+Open browser:
+
+```text
+http://localhost:5000
+```
+
+Upload:
+
+- Job description file
+- Candidate dataset
+
+Click **Rank Candidates** to generate rankings.
+
+---
+
+## Project Modules
 
 | File | Purpose |
 |------|---------|
-| `app.py` | Flask server + route wiring |
-| `data_loader.py` | Load JD and candidates from JSON / JSONL / text / docx |
-| `jd_intelligence.py` | LLM-based JD parser → structured features (with keyword fallback) |
-| `feature_engineering.py` | Rich candidate features: domain scores, company type, availability |
-| `embeddings.py` | Semantic similarity via sentence-transformers or TF-IDF fallback |
-| `ranker.py` | Hybrid ranker combining all signals |
-| `reasoning.py` | Evidence-based reasoning — no hallucination |
-| `submission.py` | Build final submission.csv (always 100 rows) |
-| `templates/index.html` | Minimal, clean frontend |
+| `app.py` | Flask server and routing |
+| `data_loader.py` | Loads job descriptions and candidate files |
+| `jd_intelligence.py` | Job description parsing |
+| `feature_engineering.py` | Candidate signal extraction |
+| `embeddings.py` | Semantic similarity computation |
+| `ranker.py` | Stage 1 weighted scoring |
+| `pairwise_ranker.py` | Stage 2 reranking |
+| `reasoning.py` | Reasoning generation |
+| `submission.py` | Submission CSV generation |
+| `templates/index.html` | Frontend interface |
 
-## Scoring formula
+---
 
+## Example Reasoning
+
+```text
+Candidate Name | 6y exp | ML Engineer at Product Company
+Strengths: strong retrieval systems, production ML deployment
+Concerns: limited ranking evaluation evidence
+Availability: open to work, 30d notice
+Scores [semantic=0.72 career=0.81 prod=0.64 total=0.84]
 ```
-score = 0.35 × semantic_similarity    (embedding cosine, all-MiniLM-L6-v2)
-      + 0.25 × domain_fit             (retrieval/prod/AI/eval/python weighted)
-      + 0.20 × skill_overlap          (0.7 recall + 0.3 jaccard vs JD skills)
-      + 0.20 × experience_fit         (sigmoid centred on JD min_years)
-      + 0.05 × availability_score     (open-to-work, notice period, response rate)
 
-score × 0.5   if honeypot / suspicious
-score × 0.5–1.0  based on consulting vs product background
-```
+---
 
-## Reasoning format
+## AI Tool Usage
 
-```
-{Name} | {N}y exp | {most-recent-title} at {company}
-| Strengths: retrieval/ranking systems, production ML, …
-| Concerns: consulting-only background
-| Availability: actively looking; 30d notice
-| Scores [semantic=0.72 domain=0.65 skills=0.58 exp=0.80 total=0.6841]
-```
+AI tools were used for:
+
+- architectural discussion
+- debugging
+- code review
+- documentation support
+
+AI tools were not used during final candidate ranking inference.
